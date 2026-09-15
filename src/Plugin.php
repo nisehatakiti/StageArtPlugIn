@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace StageArtPlugIn;
 use StageArtPlugIn\Infrastructure\Schema\Schema;
 use StageArtPlugIn\Infrastructure\Schema\ProductionMigration;
+use StageArtPlugIn\Domain\Production\ProductionValidator;
 use StageArtPlugIn\Presentation\Admin\AdminMenu;
 use StageArtPlugIn\Presentation\Admin\MemberAdmin;
 use StageArtPlugIn\Presentation\Admin\ProductionAdmin;
@@ -19,6 +20,7 @@ final class Plugin{
   ProductionMigration::ensure();
   add_action('init',static function():void{register_post_type('stageart_production',['labels'=>['name'=>'公演','singular_name'=>'公演'],'public'=>false,'show_ui'=>false,'supports'=>['title'],'rewrite'=>false]);},5);
   add_action('admin_menu',[new AdminMenu(),'register']);add_action('admin_menu',[new SiteSettingsAdmin(),'register'],20);add_action('admin_menu',[new MemberAdmin(),'register'],20);add_action('admin_menu',[new ProductionAdmin(),'register'],20);
+  add_action('admin_post_stageart_save_production',static function():void{if(!current_user_can('manage_options'))wp_die('権限がありません。');(new ProductionValidator())->validate(wp_unslash($_POST));},1);
   add_action('rest_api_init',static function():void{(new HealthController())->register_routes();(new MemberController())->register_routes();});(new MemberShortcodes())->register();(new MemberRouter())->register();(new ProductionRouter())->register();
  }
 }
