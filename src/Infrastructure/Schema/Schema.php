@@ -6,7 +6,7 @@ namespace StageArtPlugIn\Infrastructure\Schema;
 
 final class Schema
 {
-    public const DB_VERSION = '0.3.0';
+    public const DB_VERSION = '0.4.0';
 
     public static function activate(): void
     {
@@ -19,6 +19,8 @@ final class Schema
         $fields = $wpdb->prefix . 'stageart_plugin_member_fields';
         $values = $wpdb->prefix . 'stageart_plugin_member_field_values';
         $history = $wpdb->prefix . 'stageart_plugin_member_slug_history';
+        $credit_sections = $wpdb->prefix . 'stageart_plugin_production_credit_sections';
+        $credit_items = $wpdb->prefix . 'stageart_plugin_production_credit_items';
 
         require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
@@ -91,6 +93,31 @@ final class Schema
             PRIMARY KEY (id),
             UNIQUE KEY slug (slug),
             KEY member_id (member_id)
+        ) {$charset};");
+
+        dbDelta("CREATE TABLE {$credit_sections} (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            production_id BIGINT UNSIGNED NOT NULL,
+            name VARCHAR(191) NOT NULL,
+            release_at DATETIME NULL,
+            display_order INT UNSIGNED NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL,
+            updated_at DATETIME NOT NULL,
+            PRIMARY KEY (id),
+            KEY production_order (production_id, display_order),
+            KEY production_release (production_id, release_at)
+        ) {$charset};");
+
+        dbDelta("CREATE TABLE {$credit_items} (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            section_id BIGINT UNSIGNED NOT NULL,
+            name VARCHAR(191) NOT NULL,
+            url VARCHAR(2048) NULL,
+            display_order INT UNSIGNED NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL,
+            updated_at DATETIME NOT NULL,
+            PRIMARY KEY (id),
+            KEY section_order (section_id, display_order)
         ) {$charset};");
 
         update_option('stageart_plugin_db_version', self::DB_VERSION, false);
