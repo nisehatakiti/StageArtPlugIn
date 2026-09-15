@@ -2,69 +2,155 @@
 
 ## 1. Starting Point
 
-StageArt PlugIn starts from an existing Organization.
+StageArt PlugIn is a WordPress plugin for a performing-arts organization to build and manage its own public website.
+
+The WordPress site itself is the organization's site context. StageArt PlugIn therefore does not introduce a separate Organization URL or duplicate Organization entity solely to represent the site.
 
 ```text
-Basic Settings
-    ↓
-Organization
-    ↓
-Organization Page
-    ↓
-Production registration
-    ↓
-Production Page
+WordPress Site
+    ├── Basic organization information
+    ├── Contact content
+    ├── Members
+    ├── Productions
+    ├── Notices
+    ├── Homepage configuration
+    └── Menu configuration
 ```
 
-The plugin initially provides a WordPress-native public site structure for a performing-arts organization rather than reproducing the entire StageArt platform.
+The plugin initially provides a WordPress-native public site structure for a performing-arts organization, while keeping business functions such as performances and ticketing extensible.
 
-## 2. Organization
+## 2. Organization Information
 
-An Organization is the top-level owner of StageArt content on the WordPress site.
+Basic organization information is site-level data/settings rather than an independently addressable Organization content item.
 
-The Organization has one public page containing at minimum:
+Typical fields include:
 
 - organization name
-- description / introduction
-- logo / featured image
-- contact / external links
-- published productions
-- member listing
+- organization introduction
+- social links such as X, Instagram, YouTube, and Facebook
+- logo / organization image where appropriate
 
-A site may start with one Organization. The model should not prevent multiple Organizations in the future.
+There is no separate Organization slug or Organization URL.
 
-## 3. Production
+## 3. Contact Content
 
-A Production belongs to exactly one Organization.
+Contact information is provided as system content that can be placed on the site when the organization chooses.
 
-Each Production has its own independent public page. The Organization page provides discovery and navigation, while the Production page is the canonical public page for that individual production.
+Typical fields include:
+
+- address
+- email address
+- phone number
+
+Contact content is independent of placement. It may be linked from the menu, shown on the homepage, nested under another menu item, or left unpublished from the site's navigation.
+
+## 4. Production
+
+A Production is independent content with its own slug and public page.
 
 ```text
-Organization Page
-    ├── Production A → /production/a/
-    ├── Production B → /production/b/
-    └── Production C → /production/c/
+Production
+    ├── title
+    ├── slug
+    ├── overview
+    ├── main image
+    ├── introduction
+    ├── cast / staff
+    ├── performance dates
+    ├── venue
+    └── ticket information
 ```
 
-Production may contain title, description, poster, venue, performance dates, cast, staff, ticket information, external links, and related materials.
+Public URLs use the production slug:
 
-## 4. Members
+```text
+/production/{production-slug}/
+```
 
-Members are initially display-oriented records, not authenticated StageArt users.
+WordPress `post_name` semantics are used. Slugs are editable, and old slugs are retained as redirect history so that previous URLs can permanently redirect to the current slug without redirect chains. Publication state is separate from production lifecycle/date state.
 
-A member entry represents a person who should appear on the Organization or Production page. It may contain:
+"Past productions" are not a separate data model. They are an archive/listing view of the same Production content based on publication state and date/status.
 
-- display name
+## 5. Members
+
+Members are independent display-oriented records/content and are not authenticated users by default.
+
+A member may contain:
+
+- name (required)
+- slug (required internally; generated automatically and editable)
 - profile image
-- biography
-- role / position
-- SNS or external links
+- roles
+- profile / biography
+- SNS links
+- organization-defined common custom fields
 - display order
-- visibility
 
-There is no requirement that every member have an AuthCore account.
+### 5.1 Roles
 
-## 5. Authentication and Tickets
+Roles are provided as a built-in multi-select preset rather than free text.
+
+```text
+- Actor / 俳優
+- Director / 演出
+- Writer / 脚本
+- Production / 制作
+- Sound / 音響
+- Lighting / 照明
+- Stage Manager / 舞台監督
+- Theater Company Representative / 劇団代表
+```
+
+A member may select multiple roles.
+
+### 5.2 Organization-wide custom fields
+
+Custom member fields are defined once for the entire WordPress site / theater organization and then shared by all members.
+
+Each field has at least:
+
+- internal field ID
+- field name
+- description/help text
+- active/inactive state
+- display order
+
+Each member stores a value against the shared field definition.
+
+The lifecycle rules are:
+
+- **Add:** creates a new shared field. It appears for all members with an initially empty value.
+- **Edit:** changes the field definition (for example field name or help text) without changing its internal ID or existing member values.
+- **Reorder:** changes the shared display order for every member.
+- **Deactivate:** hides the field from member edit screens and public member pages. Existing member values are retained and are not deleted.
+- **Reuse:** reactivates a deactivated field. Existing member values become available again and are displayed without re-entry.
+- **Delete:** the initial implementation does not provide normal hard deletion of member custom fields. Deactivation is the standard removal operation so that data can be recovered later.
+
+When a field is deactivated, the confirmation message must clearly state that the field will disappear from editing/public display but that entered data will be retained. When a field is reused, the confirmation message must clearly state that the field will return for all members and that previously entered values will be reused.
+
+The field's previous display order should be retained when it is deactivated, so reusing it can restore the prior relative position. It remains possible to reorder it again afterward.
+
+## 6. Homepage and Menu
+
+Content is independent of where it is displayed.
+
+### Homepage
+
+The homepage is a configurable set of sections/slots. Each slot may reference content or headings, and sections can be reordered. Theme settings control presentation.
+
+### Menu
+
+The menu is an independent navigation tree. Items may be folders or links to content/pages, with:
+
+- hierarchy
+- label
+- enabled/disabled state
+- order
+- indent/outdent behavior
+
+The same content may be linked from multiple menu locations.
+
+## 7. Authentication and Tickets
 
 Ticket management is the first area that requires authenticated users.
 
@@ -76,7 +162,7 @@ AuthCore Application Key: stageart
 AuthCore Application Name: StageArt
 ```
 
-StageArt therefore has its own user/account namespace while AuthCore supplies the common authentication engine.
+AuthCore owns authentication, credentials, sessions, password/security flows and account-related infrastructure. StageArt PlugIn owns application-specific business data such as ticket types, performances, reservations, tickets and check-in.
 
 Conceptually:
 
@@ -94,47 +180,54 @@ Reservation
 Ticket
 ```
 
-AuthCore owns authentication, credentials, sessions and account security. StageArt PlugIn owns ticket types, performances, reservations, tickets, status and check-in business data.
+StageArt PlugIn should use a boundary/adapter around AuthCore so business-domain code does not directly depend on AuthCore implementation classes.
 
-## 6. Separation of Responsibilities
+## 8. Separation of Responsibilities
 
 ```text
 AuthCore
  └── authentication / account / credential / session
 
 StageArt PlugIn
- ├── Organization
- ├── Production
- ├── Performance
- ├── Member Entry
- ├── Ticket Type
- ├── Reservation
- ├── Ticket
- └── Check-in
+ ├── site-level organization information
+ ├── contact content
+ ├── production
+ ├── member
+ ├── homepage configuration
+ ├── menu configuration
+ ├── performance
+ ├── ticket type
+ ├── reservation
+ ├── ticket
+ └── check-in
 ```
 
-StageArt PlugIn must not duplicate password or credential management. It should use an adapter/service boundary around AuthCore so the domain layer does not directly depend on AuthCore implementation classes.
+StageArt PlugIn must not duplicate password or credential management.
 
-## 7. WordPress Representation
+## 9. WordPress Representation
+
+The plugin should use WordPress-native concepts where they fit the content model.
 
 Recommended initial representation:
 
-- Organization: dedicated StageArt content model or custom post type
-- Production: custom post type with an Organization relationship
-- Member: dedicated StageArt display-entry model
-- Performance: StageArt data model related to Production
-- Ticket / Reservation: dedicated StageArt tables
+- site organization information: WordPress/site settings or plugin settings
+- contact: system content/page-like content
+- production: custom post type with independent `post_name`
+- member: dedicated StageArt member content model with individual public detail pages
+- notices: WordPress posts or equivalent native publishing content
+- performance: StageArt data model related to Production
+- ticket / reservation / check-in: dedicated StageArt data models/tables
 
-The public URL structure should make the Organization → Production relationship clear while keeping Production pages independently addressable.
+A separate Organization CPT/table is not required merely to represent the WordPress site's owning theater organization.
 
-## 8. Initial Implementation Order
+## 10. Initial Implementation Order
 
-1. Basic settings
-2. Organization creation/editing
-3. Organization public page
-4. Member display entries
-5. Production creation/editing
-6. Production public page
+1. Site-level organization information
+2. Contact content
+3. Member content and member common-field management
+4. Production content and public production pages
+5. Homepage configuration
+6. Menu configuration
 7. Performance management
 8. AuthCore integration boundary
 9. StageArt account creation/login flow
@@ -142,4 +235,4 @@ The public URL structure should make the Organization → Production relationshi
 11. Reservations
 12. Tickets / check-in
 
-The first milestone is a usable organization → production public website with a clean foundation for authenticated ticket management.
+The first public-site milestone is a usable WordPress theater website with organization information, contact content, members, productions, configurable homepage sections, and menu navigation, while maintaining a clean foundation for authenticated ticket management.
