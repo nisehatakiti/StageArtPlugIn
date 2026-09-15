@@ -6,28 +6,73 @@ StageArtの主要な舞台活動機能を、既存のWordPressサイトへ導入
 
 StageArt本体の設計を参照しつつ、WordPress固有の実装とStageArtの業務モデルを分離します。
 
-基本モデルは以下を中心とします。
+WordPressサイト自体を舞台芸術団体のサイトとして扱い、団体を別CPTや別URLとして二重管理しない方針です。
+
+基本構成は以下です。
 
 ```text
-Person
-  ├─ Membership ─→ Organization
-  └─ Participant ─→ Production
-                         └─ Performance
+WordPress Site
+├─ 団体情報
+├─ 連絡先
+├─ メンバー
+├─ 公演
+├─ お知らせ
+├─ トップページ
+└─ メニュー
 ```
 
-Organization MembershipとProductionへの参加は別物として扱います。
+## メンバー
+
+メンバーは個別ページを持つ独立したコンテンツです。認証ユーザーである必要はありません。
+
+標準項目:
+
+- 名前（必須）
+- Slug（システムで自動生成。編集可能）
+- 写真
+- 役割
+- プロフィール
+- SNS
+- 表示順
+
+役割は以下のプリセットから複数選択します。
+
+- 俳優
+- 演出
+- 脚本
+- 制作
+- 音響
+- 照明
+- 舞台監督
+- 劇団代表
+
+### 劇団共通の自由記述項目
+
+メンバーの追加項目は、劇団全体で共通する項目定義として管理します。
+
+各項目は、項目名・説明・有効/無効・表示順を持ち、各メンバーはその項目に対する入力値を保持します。
+
+- 追加: 全メンバーに新しい空欄項目を追加
+- 編集: 項目名・説明などを変更。内部IDと既存入力値は維持
+- 並び替え: 全メンバーに共通する表示順を変更
+- 無効化: 編集画面と公開ページから非表示。既存入力値は削除せず保持
+- 再利用: 無効項目を再び表示。以前の入力値をそのまま復活
+- 完全削除: 初期版では通常機能として提供しない
+
+無効化・再利用の確認画面では、入力済みデータが保持されること、または以前のデータが再利用されることを明示します。
+
+## Production
+
+公演は独立したコンテンツで、固有のSlugを持ちます。
+
+公開URLは `/production/{production-slug}/` 形式とします。
+
+過去公演は別データモデルではなく、同じ公演コンテンツを日付・状態に応じて一覧表示するアーカイブビューです。
 
 ## StageArt本体との関係
 
 StageArt本体では Core と Ticket / Rehearsal / Accounting などのDomain Moduleを境界づける設計方針が採用されています。このプラグインもその思想に従い、WordPress上で独立して利用できる構造を目指します。
 
-## 現在の実装
+## AuthCore
 
-- WordPress plugin bootstrap
-- StageArt管理画面の入口
-- `/wp-json/stageart/v1/health` REST endpoint
-- Organizationの初期DBスキーマ
-
-## 今後
-
-まずCore相当の最小単位として、Organization / Production / Performance / Membership / Participantを整備し、その後に公開公演ページ、チケット・予約、稽古、受付などのModuleを段階的に追加します。
+StageArtPlugInはAuthCoreの **Application** として認証基盤を利用します。AuthCoreは認証・資格情報・セッション・アカウントセキュリティを担当し、StageArtPlugInは公演、メンバー、パフォーマンス、チケット、予約、受付などの業務データを担当します。
