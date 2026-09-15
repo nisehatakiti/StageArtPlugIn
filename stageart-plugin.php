@@ -2,7 +2,7 @@
 /**
  * Plugin Name: StageArt PlugIn
  * Description: StageArt features for standalone WordPress sites.
- * Version: 0.2.0
+ * Version: 0.2.1
  * Requires at least: 6.0
  * Requires PHP: 8.0
  * Author: nisehatakiti
@@ -13,7 +13,7 @@
  * AuthCore: application
  * AuthCore Application Key: stageart
  * AuthCore Application Name: StageArt
- * AuthCore Application Version: 0.2.0
+ * AuthCore Application Version: 0.2.1
  * AuthCore Application URI: https://github.com/nisehatakiti/StageArtPlugIn
  * AuthCore Vendor: nisehatakiti
  * AuthCore Vendor URI: https://github.com/nisehatakiti
@@ -27,7 +27,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('STAGEART_PLUGIN_VERSION', '0.2.0');
+define('STAGEART_PLUGIN_VERSION', '0.2.1');
 define('STAGEART_PLUGIN_FILE', __FILE__);
 define('STAGEART_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('STAGEART_PLUGIN_URL', plugin_dir_url(__FILE__));
