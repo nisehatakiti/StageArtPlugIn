@@ -32,5 +32,10 @@ define('STAGEART_PLUGIN_URL',plugin_dir_url(__FILE__));
 
 spl_autoload_register(static function(string $class):void{ $prefix='StageArtPlugIn\\'; if(!str_starts_with($class,$prefix))return; $relative=substr($class,strlen($prefix)); $path=STAGEART_PLUGIN_DIR.'src/'.str_replace('\\','/',$relative).'.php'; if(is_file($path))require_once $path; });
 
-register_activation_hook(STAGEART_PLUGIN_FILE,[StageArtPlugIn\Infrastructure\Schema\Schema::class,'activate']);
+register_activation_hook(STAGEART_PLUGIN_FILE,static function():void{
+    StageArtPlugIn\Infrastructure\Schema\Schema::activate();
+    (new StageArtPlugIn\Presentation\PublicSite\MemberRouter())->add_rewrite_rules();
+    flush_rewrite_rules();
+});
+
 add_action('plugins_loaded',static function():void{(new StageArtPlugIn\Plugin())->boot();});
