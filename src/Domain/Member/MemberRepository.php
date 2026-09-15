@@ -6,213 +6,23 @@ namespace StageArtPlugIn\Domain\Member;
 
 final class MemberRepository
 {
-    public const ROLES = [
-        'actor' => '俳優',
-        'director' => '演出',
-        'writer' => '脚本',
-        'production' => '制作',
-        'sound' => '音響',
-        'lighting' => '照明',
-        'stage_manager' => '舞台監督',
-        'representative' => '劇団代表',
-    ];
-
-    public const SOCIAL_PLATFORMS = [
-        'x' => 'X',
-        'instagram' => 'Instagram',
-        'facebook' => 'Facebook',
-        'youtube' => 'YouTube',
-        'tiktok' => 'TikTok',
-    ];
-
-    public function all(bool $include_drafts = true): array
-    {
-        global $wpdb;
-        $table = $wpdb->prefix . 'stageart_plugin_members';
-        $where = $include_drafts ? '' : $wpdb->prepare(' WHERE status = %s', 'published');
-        return $wpdb->get_results("SELECT * FROM {$table}{$where} ORDER BY display_order ASC, id ASC", ARRAY_A) ?: [];
-    }
-
-    public function find(int $id): ?array
-    {
-        global $wpdb;
-        $table = $wpdb->prefix . 'stageart_plugin_members';
-        $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE id = %d", $id), ARRAY_A);
-        if (!$row) return null;
-        $row['roles'] = $this->roles($id);
-        $row['social_links'] = $this->socialLinks($id);
-        $row['custom_fields'] = $this->customValues($id);
-        return $row;
-    }
-
-    public function findBySlug(string $slug): ?array
-    {
-        global $wpdb;
-        $table = $wpdb->prefix . 'stageart_plugin_members';
-        $id = (int) $wpdb->get_var($wpdb->prepare("SELECT id FROM {$table} WHERE slug = %s", $slug));
-        return $id ? $this->find($id) : null;
-    }
-
-    public function save(array $data): int
-    {
-        global $wpdb;
-        $table = $wpdb->prefix . 'stageart_plugin_members';
-        $now = current_time('mysql');
-        $id = isset($data['id']) ? (int) $data['id'] : 0;
-        $payload = [
-            'name' => sanitize_text_field((string) $data['name']),
-            'slug' => sanitize_title((string) $data['slug']),
-            'photo_id' => !empty($data['photo_id']) ? (int) $data['photo_id'] : null,
-            'profile' => isset($data['profile']) ? wp_kses_post((string) $data['profile']) : null,
-            'status' => in_array(($data['status'] ?? 'draft'), ['draft', 'published'], true) ? $data['status'] : 'draft',
-            'display_order' => isset($data['display_order']) ? max(0, (int) $data['display_order']) : 0,
-        ];
-        if ($id) {
-            $old = $this->find($id);
-            $payload['updated_at'] = $now;
-            $wpdb->update($table, $payload, ['id' => $id]);
-            if ($old && $old['slug'] !== $payload['slug']) $this->recordSlug($id, $old['slug']);
-        } else {
-            $payload['created_at'] = $now;
-            $payload['updated_at'] = $now;
-            $wpdb->insert($table, $payload);
-            $id = (int) $wpdb->insert_id;
-        }
-        $this->replaceRoles($id, (array) ($data['roles'] ?? []));
-        $this->replaceSocialLinks($id, (array) ($data['social_links'] ?? []));
-        $this->replaceCustomValues($id, (array) ($data['custom_fields'] ?? []));
-        return $id;
-    }
-
-    public function updateOrder(array $ids): void
-    {
-        global $wpdb;
-        $table = $wpdb->prefix . 'stageart_plugin_members';
-        foreach (array_values($ids) as $order => $id) {
-            $wpdb->update($table, ['display_order' => $order + 1, 'updated_at' => current_time('mysql')], ['id' => (int) $id]);
-        }
-    }
-
-    public function roles(int $id): array
-    {
-        global $wpdb;
-        $table = $wpdb->prefix . 'stageart_plugin_member_roles';
-        return $wpdb->get_col($wpdb->prepare("SELECT role_key FROM {$table} WHERE member_id = %d ORDER BY role_key", $id)) ?: [];
-    }
-
-    public function socialLinks(int $id): array
-    {
-        global $wpdb;
-        $table = $wpdb->prefix . 'stageart_plugin_member_social_links';
-        $rows = $wpdb->get_results($wpdb->prepare("SELECT platform, url FROM {$table} WHERE member_id = %d", $id), ARRAY_A) ?: [];
-        $out = [];
-        foreach ($rows as $row) $out[$row['platform']] = $row['url'];
-        return $out;
-    }
-
-    public function activeFields(): array
-    {
-        global $wpdb;
-        $table = $wpdb->prefix . 'stageart_plugin_member_fields';
-        return $wpdb->get_results("SELECT * FROM {$table} WHERE is_active = 1 ORDER BY display_order ASC, id ASC", ARRAY_A) ?: [];
-    }
-
-    public function allFields(): array
-    {
-        global $wpdb;
-        $table = $wpdb->prefix . 'stageart_plugin_member_fields';
-        return $wpdb->get_results("SELECT * FROM {$table} ORDER BY display_order ASC, id ASC", ARRAY_A) ?: [];
-    }
-
-    public function saveField(array $data): int
-    {
-        global $wpdb;
-        $table = $wpdb->prefix . 'stageart_plugin_member_fields';
-        $id = isset($data['id']) ? (int) $data['id'] : 0;
-        $now = current_time('mysql');
-        $payload = [
-            'name' => sanitize_text_field((string) $data['name']),
-            'description' => sanitize_textarea_field((string) ($data['description'] ?? '')),
-            'updated_at' => $now,
-        ];
-        if ($id) {
-            $wpdb->update($table, $payload, ['id' => $id]);
-            return $id;
-        }
-        $payload['field_key'] = sanitize_key((string) ($data['field_key'] ?? 'field_' . wp_generate_password(8, false, false)));
-        $payload['is_active'] = 1;
-        $payload['display_order'] = count($this->allFields()) + 1;
-        $payload['created_at'] = $now;
-        $wpdb->insert($table, $payload);
-        return (int) $wpdb->insert_id;
-    }
-
-    public function setFieldActive(int $id, bool $active): void
-    {
-        global $wpdb;
-        $table = $wpdb->prefix . 'stageart_plugin_member_fields';
-        $wpdb->update($table, ['is_active' => $active ? 1 : 0, 'updated_at' => current_time('mysql')], ['id' => $id]);
-    }
-
-    public function updateFieldOrder(array $ids): void
-    {
-        global $wpdb;
-        $table = $wpdb->prefix . 'stageart_plugin_member_fields';
-        foreach (array_values($ids) as $order => $id) $wpdb->update($table, ['display_order' => $order + 1, 'updated_at' => current_time('mysql')], ['id' => (int) $id]);
-    }
-
-    private function replaceRoles(int $id, array $roles): void
-    {
-        global $wpdb;
-        $table = $wpdb->prefix . 'stageart_plugin_member_roles';
-        $wpdb->delete($table, ['member_id' => $id]);
-        foreach (array_unique($roles) as $role) if (isset(self::ROLES[$role])) $wpdb->insert($table, ['member_id' => $id, 'role_key' => $role]);
-    }
-
-    private function replaceSocialLinks(int $id, array $links): void
-    {
-        global $wpdb;
-        $table = $wpdb->prefix . 'stageart_plugin_member_social_links';
-        $wpdb->delete($table, ['member_id' => $id]);
-        foreach ($links as $platform => $url) {
-            if (!isset(self::SOCIAL_PLATFORMS[$platform]) || !$url) continue;
-            $url = esc_url_raw((string) $url);
-            if ($url) $wpdb->insert($table, ['member_id' => $id, 'platform' => $platform, 'url' => $url, 'created_at' => current_time('mysql'), 'updated_at' => current_time('mysql')]);
-        }
-    }
-
-    private function customValues(int $id): array
-    {
-        global $wpdb;
-        $table = $wpdb->prefix . 'stageart_plugin_member_field_values';
-        $rows = $wpdb->get_results($wpdb->prepare("SELECT field_id, value FROM {$table} WHERE member_id = %d", $id), ARRAY_A) ?: [];
-        $out = [];
-        foreach ($rows as $row) $out[(int) $row['field_id']] = $row['value'];
-        return $out;
-    }
-
-    private function replaceCustomValues(int $id, array $values): void
-    {
-        global $wpdb;
-        $table = $wpdb->prefix . 'stageart_plugin_member_field_values';
-        $fields = $this->allFields();
-        $valid = [];
-        foreach ($fields as $field) $valid[(int) $field['id']] = true;
-        foreach ($values as $fieldId => $value) {
-            $fieldId = (int) $fieldId;
-            if (!$fieldId || !isset($valid[$fieldId])) continue;
-            $existing = (int) $wpdb->get_var($wpdb->prepare("SELECT id FROM {$table} WHERE member_id = %d AND field_id = %d", $id, $fieldId));
-            $data = ['value' => wp_kses_post((string) $value), 'updated_at' => current_time('mysql')];
-            if ($existing) $wpdb->update($table, $data, ['id' => $existing]);
-            else { $data['member_id'] = $id; $data['field_id'] = $fieldId; $data['created_at'] = current_time('mysql'); $wpdb->insert($table, $data); }
-        }
-    }
-
-    private function recordSlug(int $memberId, string $slug): void
-    {
-        global $wpdb;
-        $table = $wpdb->prefix . 'stageart_plugin_member_slug_history';
-        $exists = $wpdb->get_var($wpdb->prepare("SELECT id FROM {$table} WHERE slug = %s", $slug));
-        if (!$exists) $wpdb->insert($table, ['member_id' => $memberId, 'slug' => $slug, 'created_at' => current_time('mysql')]);
-    }
+    public const ROLES = ['actor'=>'俳優','director'=>'演出','writer'=>'脚本','production'=>'制作','sound'=>'音響','lighting'=>'照明','stage_manager'=>'舞台監督','representative'=>'劇団代表'];
+    public const SOCIAL_PLATFORMS = ['x'=>'X','instagram'=>'Instagram','facebook'=>'Facebook','youtube'=>'YouTube','tiktok'=>'TikTok'];
+    public function all(bool $publicOnly=false):array{global $wpdb;$t=$wpdb->prefix.'stageart_plugin_members';$w=$publicOnly?"WHERE status='published'":'';return $wpdb->get_results("SELECT * FROM {$t} {$w} ORDER BY display_order ASC,id ASC",ARRAY_A)?:[];}
+    public function find(int $id):?array{global $wpdb;$t=$wpdb->prefix.'stageart_plugin_members';$r=$wpdb->get_row($wpdb->prepare("SELECT * FROM {$t} WHERE id=%d",$id),ARRAY_A);if(!$r)return null;$r['roles']=$this->roles($id);$r['social']=$this->social($id);$r['custom_fields']=$this->customValues($id);return $r;}
+    public function findBySlug(string $slug):?array{global $wpdb;$t=$wpdb->prefix.'stageart_plugin_members';$id=(int)$wpdb->get_var($wpdb->prepare("SELECT id FROM {$t} WHERE slug=%s",$slug));return $id?$this->find($id):null;}
+    public function save(array $d):int{global $wpdb;$t=$wpdb->prefix.'stageart_plugin_members';$now=current_time('mysql');$id=(int)($d['id']??0);$name=sanitize_text_field((string)($d['name']??''));$slug=$this->uniqueSlug(sanitize_title((string)($d['slug']??$name)),$id);$photo=!empty($d['photo_id'])?(int)$d['photo_id']:null;$profile=wp_kses_post((string)($d['profile']??''));$status=in_array(($d['status']??'draft'),['draft','published'],true)?$d['status']:'draft';$order=max(0,(int)($d['display_order']??0));if($id){$old=(string)$wpdb->get_var($wpdb->prepare("SELECT slug FROM {$t} WHERE id=%d",$id));$wpdb->update($t,['name'=>$name,'slug'=>$slug,'photo_id'=>$photo,'profile'=>$profile,'status'=>$status,'display_order'=>$order,'updated_at'=>$now],['id'=>$id],['%s','%s','%d','%s','%s','%d','%s'],['%d']);if($old&&$old!==$slug)$wpdb->insert($wpdb->prefix.'stageart_plugin_member_slug_history',['member_id'=>$id,'slug'=>$old,'created_at'=>$now],['%d','%s','%s']);}else{$wpdb->insert($t,['name'=>$name,'slug'=>$slug,'photo_id'=>$photo,'profile'=>$profile,'status'=>$status,'display_order'=>$order,'created_at'=>$now,'updated_at'=>$now],['%s','%s','%d','%s','%s','%d','%s','%s']);$id=(int)$wpdb->insert_id;}$this->replaceRoles($id,(array)($d['roles']??[]));$this->replaceSocial($id,(array)($d['social']??[]));$this->replaceCustomValues($id,(array)($d['custom_fields']??[]));return $id;}
+    public function setOrder(array $ids):void{global $wpdb;$t=$wpdb->prefix.'stageart_plugin_members';foreach(array_values(array_unique(array_map('intval',$ids))) as $n=>$id)$wpdb->update($t,['display_order'=>$n+1,'updated_at'=>current_time('mysql')],['id'=>$id],['%d','%s'],['%d']);}
+    public function fields(bool $activeOnly=false):array{global $wpdb;$t=$wpdb->prefix.'stageart_plugin_member_fields';$w=$activeOnly?'WHERE is_active=1':'';return $wpdb->get_results("SELECT * FROM {$t} {$w} ORDER BY display_order ASC,id ASC",ARRAY_A)?:[];}
+    public function saveField(array $d):int{global $wpdb;$t=$wpdb->prefix.'stageart_plugin_member_fields';$id=(int)($d['id']??0);$name=sanitize_text_field((string)($d['name']??''));$desc=sanitize_textarea_field((string)($d['description']??''));$now=current_time('mysql');if($id){$wpdb->update($t,['name'=>$name,'description'=>$desc,'updated_at'=>$now],['id'=>$id],['%s','%s','%s'],['%d']);return $id;}$key=$this->uniqueFieldKey(sanitize_key((string)($d['field_key']??$name)));$max=(int)$wpdb->get_var("SELECT COALESCE(MAX(display_order),0) FROM {$t}");$wpdb->insert($t,['field_key'=>$key,'name'=>$name,'description'=>$desc,'is_active'=>1,'display_order'=>$max+1,'created_at'=>$now,'updated_at'=>$now],['%s','%s','%s','%d','%d','%s','%s']);return (int)$wpdb->insert_id;}
+    public function setFieldState(int $id,bool $active):void{global $wpdb;$wpdb->update($wpdb->prefix.'stageart_plugin_member_fields',['is_active'=>$active?1:0,'updated_at'=>current_time('mysql')],['id'=>$id],['%d','%s'],['%d']);}
+    public function setFieldOrder(array $ids):void{global $wpdb;$t=$wpdb->prefix.'stageart_plugin_member_fields';foreach(array_values(array_unique(array_map('intval',$ids))) as $n=>$id)$wpdb->update($t,['display_order'=>$n+1,'updated_at'=>current_time('mysql')],['id'=>$id],['%d','%s'],['%d']);}
+    private function roles(int $id):array{global $wpdb;return array_map('strval',$wpdb->get_col($wpdb->prepare("SELECT role_key FROM {$wpdb->prefix}stageart_plugin_member_roles WHERE member_id=%d",$id))?:[]);}
+    private function social(int $id):array{global $wpdb;$rows=$wpdb->get_results($wpdb->prepare("SELECT platform,url FROM {$wpdb->prefix}stageart_plugin_member_social_links WHERE member_id=%d",$id),ARRAY_A)?:[];$o=[];foreach($rows as $r)$o[$r['platform']]=$r['url'];return $o;}
+    private function customValues(int $id):array{global $wpdb;$rows=$wpdb->get_results($wpdb->prepare("SELECT field_id,value FROM {$wpdb->prefix}stageart_plugin_member_field_values WHERE member_id=%d",$id),ARRAY_A)?:[];$o=[];foreach($rows as $r){$o[(int)$r['field_id']]=$r['value'];}return $o;}
+    private function replaceRoles(int $id,array $roles):void{global $wpdb;$t=$wpdb->prefix.'stageart_plugin_member_roles';$wpdb->delete($t,['member_id'=>$id],['%d']);foreach(array_unique($roles) as $r)if(isset(self::ROLES[$r]))$wpdb->insert($t,['member_id'=>$id,'role_key'=>$r],['%d','%s']);}
+    private function replaceSocial(int $id,array $social):void{global $wpdb;$t=$wpdb->prefix.'stageart_plugin_member_social_links';$wpdb->delete($t,['member_id'=>$id],['%d']);$now=current_time('mysql');foreach(self::SOCIAL_PLATFORMS as $p=>$_){$url=!empty($social[$p])?esc_url_raw((string)$social[$p]):'';if($url)$wpdb->insert($t,['member_id'=>$id,'platform'=>$p,'url'=>$url,'created_at'=>$now,'updated_at'=>$now],['%d','%s','%s','%s','%s']);}}
+    private function replaceCustomValues(int $id,array $values):void{global $wpdb;$t=$wpdb->prefix.'stageart_plugin_member_field_values';$now=current_time('mysql');foreach($this->fields(true) as $f){$fid=(int)$f['id'];if(!array_key_exists($fid,$values))continue;$v=sanitize_textarea_field((string)$values[$fid]);$existing=(int)$wpdb->get_var($wpdb->prepare("SELECT id FROM {$t} WHERE member_id=%d AND field_id=%d",$id,$fid));if($existing)$wpdb->update($t,['value'=>$v,'updated_at'=>$now],['id'=>$existing],['%s','%s'],['%d']);else$wpdb->insert($t,['member_id'=>$id,'field_id'=>$fid,'value'=>$v,'created_at'=>$now,'updated_at'=>$now],['%d','%d','%s','%s']);}}
+    private function uniqueSlug(string $slug,int $ignore=0):string{global $wpdb;$t=$wpdb->prefix.'stageart_plugin_members';$base=$slug?:'member';$c=$base;$i=2;while((int)$wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$t} WHERE slug=%s AND id<>%d",$c,$ignore)))$c=$base.'-'.($i++);return $c;}
+    private function uniqueFieldKey(string $key):string{global $wpdb;$t=$wpdb->prefix.'stageart_plugin_member_fields';$base=$key?:'field';$c=$base;$i=2;while((int)$wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$t} WHERE field_key=%s",$c)))$c=$base.'-'.($i++);return $c;}
 }
