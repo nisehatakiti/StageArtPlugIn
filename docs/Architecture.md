@@ -71,6 +71,16 @@ WordPress `post_name` semantics are used. Slugs are editable, and old slugs are 
 
 "Past productions" are not a separate data model. They are an archive/listing view of the same Production content based on publication state and date/status.
 
+### Information release
+
+Production information blocks use the common release-date model. The admin UI exposes a checkbox `情報解禁日を設定する` for each applicable information unit.
+
+- unchecked: no release date is stored; the information is public once the Production itself is public
+- checked: a Japan-time release date/time is stored as UTC and evaluated at request time
+- no cron, WP-Cron, scheduled post-status transition, or background state mutation is used
+
+Performance records are independently releasable; a Production-level `performance_release` is not part of the canonical model.
+
 ## 5. Members
 
 Members are an independent content type. Each member is an individual content item with its own public detail page. Members are not authenticated users by default.
@@ -107,8 +117,6 @@ The individual member content:
 
 The same member content may be referenced from multiple locations. Member data is not copied into each placement.
 
-This means use cases such as featuring a "看板役者" on the homepage require no special content type. The member's individual content can simply be placed directly on the homepage.
-
 ### 5.3 Member Standard Fields
 
 A member may contain:
@@ -122,6 +130,7 @@ A member may contain:
 - organization-defined common custom fields
 - display order
 - publication state
+- information release date
 
 ### 5.4 Roles
 
@@ -179,13 +188,13 @@ Administrators can reorder members through drag-and-drop or an equivalent orderi
 
 Member display order is independent of the member slug and public URL.
 
-### 5.7 Publication State
+### 5.7 Publication and release
 
-Each member individual content has a publication state.
+Each member individual content has a publication state and optional information release date.
 
-Only public members are included in public member lists and public references.
+Only members that are public and whose release date has arrived are included in public member lists and public references.
 
-Draft or otherwise non-public members remain in the content model and can be published later.
+The admin UI controls the optional release date with `情報解禁日を設定する`. Unchecked means public from the point the member is published; checked means public only from the configured Japan-time release date.
 
 ## 6. Theater Company Representative Greeting
 
@@ -206,6 +215,8 @@ The photo, name, and member-page link are resolved from the selected member cont
 
 Changing the member's photo or name therefore updates the greeting automatically.
 
+The greeting itself is an independently placeable content unit and may have its own information release setting.
+
 ## 7. Homepage and Menu
 
 Content is independent of where it is displayed.
@@ -214,7 +225,7 @@ Content is independent of where it is displayed.
 
 The homepage is a configurable set of sections/slots. A slot may reference content or headings, and sections can be reordered. Theme settings control presentation.
 
-Member individual content and the Member List are both valid content references.
+Member individual content and the Member List are both valid content references. The theater-company representative greeting is also a valid content reference.
 
 Example:
 
@@ -306,7 +317,7 @@ Recommended initial representation:
 - member list: system-provided list content referencing public member items
 - theater company representative greeting: independent content referencing one member
 - notices: WordPress posts or equivalent native publishing content
-- performance: StageArt data model related to Production
+- performance: StageArt data model related to Production, with per-record release dates
 - ticket / reservation / check-in: dedicated StageArt data models/tables
 
 A separate Organization CPT/table is not required merely to represent the WordPress site's owning theater organization.
